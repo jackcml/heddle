@@ -7,8 +7,22 @@ A DSL for image and video transformation.
 | op | description |
 | --- | --- |
 | `f(...)` | function; named transform/source with parameters. see below |
+| `[t0:t1, y0:y1, x0:x1]` | slice (time, y, x) |
 | `^k` | speed, where `k` is a float; negative values reverse input |
 | `\|` | pipe to compose transforms |
 | `over` | composites left and right inputs on top of each other |
 | `&`, `/` | horizontal and vertical stacking layout, respectively |
 | `>>` | temporal concatenation, left before right. supports transitions |
+
+## Functions
+
+Functions are used for transformations not covered by the operators, as well as for programmatic sources like `text`.
+
+| fn | description |
+| --- | --- |
+| `text(str, pos)` | displays the given `str` over the source it's applied to, aligned according to `pos`. |
+| `blur(stdev)` | applies a Gaussian blur |
+| `scale(factor)` | scales input by single factor on width and height |
+| `resize(w, h)` | scales input to exact width and height |
+| `reverse()` | reverses a clip, alias to `^-1` |
+| `dissolve(sec)` | dissolve transition for use with `>>` |
