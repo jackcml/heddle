@@ -1,0 +1,26 @@
+// whitespace insignificant except for HCAT/VCAT
+// newlines separate statements unless inside ()/[]
+
+COMMENT = "#" , { ¬newline } ;
+IDENT   = letter , { letter | digit | "_" } ;
+STRING  = '"' , { ¬'"' | escape } , '"' ;
+NUMBER  = [ "-" ] , digits , [ "." , digits ] , [ unit ] ;
+unit    = "s" | "ms" | "f" | "%" ;
+
+PIPE   = "|" ;
+CONCAT = ">>" ;
+SINK = ">" ;
+SPEED = "^" ;
+OVER = "over" ;
+HCAT   = "&" , [ mode ] ; // &, &fit, &pad, &scale
+VCAT   = "/" , [ mode ] ; // /, /fit, /pad, /scale
+mode   = letter , { letter } ;
+
+ASSIGN = "=" ;
+LPAREN="(" ;
+RPAREN=")" ;
+LBRACK="[" ;
+RBRACK="]" ;
+COMMA="," ;
+COLON=":" ;
+SEP=";" | newline ;
