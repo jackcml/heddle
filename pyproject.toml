@@ -1,0 +1,13 @@
+[project]
+name = "heddle"
+version = "0.1.0"
+description = "DSL for image and video transformation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "pytest>=9.1.0",
+]
