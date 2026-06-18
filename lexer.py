@@ -162,7 +162,7 @@ class Lexer:
         line, col = self.line, self.col
         ttype = _SINGLE[ch]
         self._advance()
-        
+
         if ttype in (TokenType.LPAREN, TokenType.LBRACK):
             self.depth += 1
         elif ttype in (TokenType.RPAREN, TokenType.RBRACK):
@@ -255,7 +255,7 @@ class Lexer:
 
     def _cat(self, ttype: TokenType) -> None:
         line, col = self.line, self.col
-        self._advance() # `&` or `/`
+        self._advance()  # `&` or `/`
         mode: Optional[str] = None
 
         # mode only attaches without whitespace in between
