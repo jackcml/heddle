@@ -2,6 +2,13 @@
 
 A DSL for image and video transformation.
 
+- Currently implemented: lexer/parser
+- Next: interpreter with support for minimal operator set, backed by pyimage
+- Future:
+  - Interpret full operator/function set
+  - Aliasing / assign names to pipelines
+  - Custom functions defined by GLSL shaders
+
 ## Sources
 
 Input images and videos are referenced with automatically defined variables. For example, when `heddle` is run in a directory with `im.gif`, `im^2 | hflip` creates a copy at 2x speed, flipped horizontally.
