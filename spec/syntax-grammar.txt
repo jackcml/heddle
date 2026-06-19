@@ -1,0 +1,25 @@
+program     = [ statement ] , { SEP , [ statement ] } ;
+statement   = binding | pipeline ;
+binding     = IDENT , ASSIGN , pipeline ;
+pipeline    = expr , [ SINK , target ] ;              // sink returns its input; tee-able / bindable
+target      = STRING | IDENT ;                        // "out.mp4": format from ext | pool name
+
+expr        = sequence ;
+sequence    = layout  , { CONCAT , layout } ;         // timeline; interior operand may be a transition
+layout      = overlay , { ( HCAT | VCAT ) , overlay } ;
+overlay     = pipe    , { OVER , pipe } ;
+pipe        = postfix , { PIPE , postfix } ;
+
+postfix     = primary , { call | index | speed } ;
+call        = LPAREN , [ arg_list ] , RPAREN ;
+index       = LBRACK , axis , { COMMA , axis } , RBRACK ;   (* axes: T, Y, X[, C] *)
+speed       = SPEED , signed_atom ;
+
+arg_list    = arg , { COMMA , arg } ;
+arg         = IDENT , ASSIGN , expr | expr ;          // keyword | positional
+
+axis        = slice | expr ;                          // range | single index
+slice       = [ expr ] , COLON , [ expr ] , [ COLON , [ expr ] ] ;  // start:stop[:step], parts optional
+
+signed_atom = NUMBER | IDENT | LPAREN , expr , RPAREN ;
+primary     = IDENT | NUMBER | STRING | LPAREN , expr , RPAREN ;
