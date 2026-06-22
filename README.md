@@ -3,7 +3,7 @@
 A DSL for image and video transformation.
 
 - Currently implemented: lexer/parser
-- Next: interpreter with support for minimal operator set, backed by pyimage
+- Next: interpreter with support for minimal operator set, backed by python `pillow`
 - Future:
   - Interpret full operator/function set
   - Aliasing / assign names to pipelines
