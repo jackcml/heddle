@@ -1,0 +1,44 @@
+# NOTE: claudeslop example of a complex use case, contains most of the grammar
+# and two big future features (shader support and user-defined macros)
+
+# ════════════════════════════════════════════════════════════════
+#  promo.heddle  —  before/after social promo, two deliverables
+#  pool:  intro  before  after  logo  music     (+ plasma.frag, grain.frag)
+# ════════════════════════════════════════════════════════════════
+
+plasma = shader("plasma.frag")     # @source  + iTime  → procedural Clip
+grain  = shader("grain.frag")      # @local(radius=1)  → subtle film grain
+look   = grade(contrast=1.1, sat=0.95, lift=#0E1216)   # one shared color look
+
+# 1 ── title card: text over a procedural animated background ──
+bg    = plasma(scale=0.6, speed=0.3)[0:2.5s]           # generator, trimmed to 2.5s
+title = bg
+      | look
+      | text("THE 10-SECOND EDIT", pos=CENTER, size=72, font="Inter-Bold")
+      | text("shot on mobile", pos=BELOW_CENTER, size=30, opacity=0.8)
+      | fade(in=0.5s, out=0.4s)
+
+# 2 ── the two comparison shots, matched to 4s, graded, labelled ──
+a = before[0:4s]        | look | label("BEFORE")       # label = styled text preset
+b = after ^1.5 [0:4s]   | look | label("AFTER")        # speed-ramp 1.5×, THEN trim
+
+# 3 ── hero: slow-mo push-in on the tail of the after-shot ──
+hero = after[4s:7s] ^0.5                                # 3s source → 6s slow-mo
+     | scale(1.15)
+     | look
+
+# 4 ── build the comparison once per layout axis ──
+side  = (a & b) | fade(in=0.3s)                         # L|R  for landscape
+stack = (a / b) | fade(in=0.3s)                         # T/B  for vertical
+
+# 5 ── timeline + grain + audio, factored over the one differing piece ──
+cut(cmp) = ( title >> dissolve(0.5) >> cmp >> dissolve(0.5) >> hero )
+         | grain
+         | fade(out=0.6s)
+
+mark(v)  = ( (logo | scale(0.12) | opacity(0.7) | pad(margin=24, anchor=BR)) over v )
+         | audio(music, gain=-3dB)                      # trims to video length
+
+# 6 ── two deliverables, differing only in the comparison axis + canvas ──
+mark(cut(side))  | resize(1920, 1080, fit=contain) > "promo_16x9.mp4"
+mark(cut(stack)) | resize(1080, 1920, fit=cover)   > "promo_9x16.mp4"
