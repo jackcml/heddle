@@ -2,7 +2,7 @@ program     = [ statement ] , { SEP , [ statement ] } ;
 statement   = binding | pipeline ;
 binding     = IDENT , ASSIGN , pipeline ;
 pipeline    = expr , [ SINK , target ] ;              // sink returns its input; tee-able / bindable
-target      = STRING | IDENT ;                        // "out.mp4": format from ext | pool name
+target      = STRING ;                                // "out.mp4": format inferred from extension
 
 expr        = sequence ;
 sequence    = layout  , { CONCAT , layout } ;         // timeline; interior operand may be a transition

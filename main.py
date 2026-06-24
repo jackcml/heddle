@@ -1,5 +1,7 @@
 from argparse import ArgumentParser
 
+import interpreter
+from errors import HeddleError
 from lexer import LexError
 from parser import (
     Binding,
@@ -95,7 +97,7 @@ def format_ast(node, indent: int = 0) -> str:
             return f"{pad}{node!r}  {at}"
 
 
-def run_file(filename: str) -> None:
+def run_file(filename: str, show_ast: bool = False) -> None:
     try:
         with open(filename, "r") as f:
             source = f.read()
@@ -107,11 +109,18 @@ def run_file(filename: str) -> None:
     except (LexError, ParseError) as e:
         print(f"heddle: {filename}:{e}")
         return
-    print(format_ast(program))
+    if show_ast:
+        print(format_ast(program))
+        return
+    try:
+        interpreter.run_program(program, cwd=".")
+    except (HeddleError, NotImplementedError) as e:
+        print(f"heddle: {filename}: {e}")
 
 
-def run_repl() -> None:
-    print("heddle REPL — enter a line to parse it; Ctrl-D to exit.")
+def run_repl(show_ast: bool = False) -> None:
+    action = "parse" if show_ast else "run"
+    print(f"heddle REPL — enter a line to {action} it; Ctrl-D to exit.")
     while True:
         try:
             line = input("> ")
@@ -128,7 +137,13 @@ def run_repl() -> None:
         except (LexError, ParseError) as e:
             print(f"  error: {e}")
             continue
-        print(format_ast(program))
+        if show_ast:
+            print(format_ast(program))
+            continue
+        try:
+            interpreter.run_program(program, cwd=".")
+        except (HeddleError, NotImplementedError) as e:
+            print(f"  error: {e}")
 
 
 def main():
@@ -140,12 +155,17 @@ def main():
     parser.add_argument(
         "filename", nargs="?", help="input file; otherwise reads from stdin"
     )
+    parser.add_argument(
+        "--ast",
+        action="store_true",
+        help="print the parsed AST instead of running the program",
+    )
     args = parser.parse_args()
 
     if args.filename:
-        run_file(args.filename)
+        run_file(args.filename, show_ast=args.ast)
     else:
-        run_repl()
+        run_repl(show_ast=args.ast)
 
 
 if __name__ == "__main__":

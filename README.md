@@ -2,10 +2,9 @@
 
 A DSL for image and video transformation.
 
-- Currently implemented: lexer/parser
-- Next: interpreter with support for minimal operator set, backed by python `pillow`
+- Currently implemented: tree-walk interpreter with support for miminal operator set, backed by `pillow`
+- Next: support full operator set
 - Future:
-  - Interpret full operator/function set
   - Aliasing / assign names to pipelines
   - Custom functions defined by GLSL shaders
 

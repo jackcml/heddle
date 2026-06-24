@@ -121,7 +121,7 @@ class Speed:
 
 @dataclass
 class Sink:
-    target: Str | Name  # Str: file (format from ext); Name: pool
+    target: Str  # output file; format inferred from the extension
     line: int
     col: int
 
@@ -233,15 +233,9 @@ class Parser:
         return Pipeline(expr, sink, expr.line, expr.col)
 
     def parse_target(self):
-        # target = STRING | IDENT
-        tok = self._peek()
-        if tok.type == TokenType.STRING:
-            self._advance()
-            return Str(tok.value, tok.line, tok.col)
-        if tok.type == TokenType.IDENT:
-            self._advance()
-            return Name(tok.value, tok.line, tok.col)
-        raise self._error("expected sink target (string or identifier)", tok)
+        # target = STRING
+        tok = self._expect(TokenType.STRING, "sink target (a string path)")
+        return Str(tok.value, tok.line, tok.col)
 
     ## expression chains (lowest to highest precedence)
 

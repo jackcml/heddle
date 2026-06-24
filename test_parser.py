@@ -127,14 +127,6 @@ def test_sink_to_string():
     )
 
 
-def test_sink_to_ident_pool():
-    assert shape(one("im > pool")) == (
-        "Pipeline",
-        ("Name", "im"),
-        ("Sink", ("Name", "pool")),
-    )
-
-
 def test_empty_call():
     assert shape(pexpr("reverse()")) == ("Call", ("Name", "reverse"), [])
 
@@ -263,7 +255,8 @@ def test_multi_statement_program_positions():
         "a > b c",  # trailing tokens after a complete statement
         "a b",  # two primaries, no operator
         'a > "out" | b',  # sink is terminal; cannot pipe after it
-        "im > 5",  # sink target must be string or ident
+        "im > 5",  # sink target must be a string
+        "im > name",  # bare-name sink targets are not supported
         "(a",  # unterminated paren
         "im[0",  # unterminated bracket
         'im^"x"',  # signed_atom excludes strings
