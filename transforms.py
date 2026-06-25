@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PIL import Image, ImageOps
 
-from clip import Clip
+from clip import DEFAULT_MS, Clip
 from errors import HeddleError
 from registry import transform
 
@@ -90,6 +92,26 @@ def apply_stack(items: list[Clip], joins: list[tuple[str, object]]) -> Clip:
     return Clip(frames, durations, loop)
 
 
+@dataclass(frozen=True)
+class TimeIndex:
+    offset_ms: int
+
+
+@dataclass(frozen=True)
+class TimeSlice:
+    start_ms: int | None
+    stop_ms: int | None
+    step: int | None = None
+
+
+def apply_index(clip: Clip, axes: list[object]) -> Clip:
+    """Slice a clip as [time, y, x], copying selected frames."""
+    time_axis, y_axis, x_axis = _complete_axes(axes)
+    frames, durations = _select_time(clip, time_axis)
+    frames = [_slice_frame(frame, y_axis, x_axis) for frame in frames]
+    return Clip(frames, durations, clip.loop)
+
+
 def _stack_pair(left: Image.Image, right: Image.Image, axis: str) -> Image.Image:
     if axis == "h":
         out = Image.new(
@@ -103,6 +125,117 @@ def _stack_pair(left: Image.Image, right: Image.Image, axis: str) -> Image.Image
     out.alpha_composite(left, (0, 0))
     out.alpha_composite(right, (0, left.height))
     return out
+
+
+def _complete_axes(axes: list[object]) -> tuple[object, object, object]:
+    if len(axes) > 3:
+        raise HeddleError("indexing supports at most three axes: [time, y, x]")
+    full = slice(None)
+    return tuple((axes + [full, full, full])[:3])
+
+
+def _select_time(clip: Clip, axis: object) -> tuple[list[Image.Image], list[int]]:
+    if isinstance(axis, TimeIndex):
+        idx = _frame_at_offset(clip, axis.offset_ms)
+        return [clip.frames[idx].copy()], [DEFAULT_MS]
+
+    if isinstance(axis, TimeSlice):
+        return _slice_time_offsets(clip, axis)
+
+    if isinstance(axis, int):
+        idx = _normalize_index(axis, len(clip.frames), "frame")
+        return [clip.frames[idx].copy()], [DEFAULT_MS]
+
+    if isinstance(axis, slice):
+        indices = range(*axis.indices(len(clip.frames)))
+        return (
+            [clip.frames[i].copy() for i in indices],
+            [clip.durations[i] for i in indices],
+        )
+
+    raise HeddleError("invalid time axis selector")
+
+
+def _slice_time_offsets(
+    clip: Clip, axis: TimeSlice
+) -> tuple[list[Image.Image], list[int]]:
+    if axis.step is not None and axis.step <= 0:
+        raise HeddleError("time-offset slices require a positive frame step")
+
+    total = sum(clip.durations)
+    start = _normalize_offset(axis.start_ms, total, 0)
+    stop = _normalize_offset(axis.stop_ms, total, total)
+
+    selected_frames = []
+    selected_durations = []
+    elapsed = 0
+    for frame, duration in zip(clip.frames, clip.durations):
+        frame_start = elapsed
+        frame_stop = elapsed + duration
+        elapsed = frame_stop
+
+        overlap_start = max(frame_start, start)
+        overlap_stop = min(frame_stop, stop)
+        if overlap_start < overlap_stop:
+            selected_frames.append(frame.copy())
+            selected_durations.append(overlap_stop - overlap_start)
+
+    if axis.step is not None:
+        selected_frames = selected_frames[:: axis.step]
+        selected_durations = selected_durations[:: axis.step]
+    return selected_frames, selected_durations
+
+
+def _slice_frame(frame: Image.Image, y_axis: object, x_axis: object) -> Image.Image:
+    x_indices = _spatial_indices(x_axis, frame.width, "x")
+    y_indices = _spatial_indices(y_axis, frame.height, "y")
+
+    if not x_indices or not y_indices:
+        raise HeddleError("spatial slice selected no pixels")
+
+    out = Image.new("RGBA", (len(x_indices), len(y_indices)))
+    out_px = out.load()
+    in_px = frame.load()
+    for out_y, in_y in enumerate(y_indices):
+        for out_x, in_x in enumerate(x_indices):
+            out_px[out_x, out_y] = in_px[in_x, in_y]
+    return out
+
+
+def _spatial_indices(axis: object, size: int, name: str) -> list[int]:
+    if isinstance(axis, int):
+        return [_normalize_index(axis, size, name)]
+    if isinstance(axis, slice):
+        return list(range(*axis.indices(size)))
+    raise HeddleError(f"invalid {name} axis selector")
+
+
+def _frame_at_offset(clip: Clip, offset_ms: int) -> int:
+    total = sum(clip.durations)
+    offset = offset_ms + total if offset_ms < 0 else offset_ms
+    if offset < 0 or offset >= total:
+        raise HeddleError("time index out of range")
+
+    elapsed = 0
+    for idx, duration in enumerate(clip.durations):
+        elapsed += duration
+        if offset < elapsed:
+            return idx
+    raise HeddleError("time index out of range")
+
+
+def _normalize_offset(offset_ms: int | None, total: int, default: int) -> int:
+    if offset_ms is None:
+        return default
+    offset = offset_ms + total if offset_ms < 0 else offset_ms
+    return min(max(offset, 0), total)
+
+
+def _normalize_index(index: int, size: int, name: str) -> int:
+    normalized = index + size if index < 0 else index
+    if normalized < 0 or normalized >= size:
+        raise HeddleError(f"{name} index out of range")
+    return normalized
 
 
 def _shared_timeline(clips: list[Clip], op: str) -> tuple[int, list[int], int]:

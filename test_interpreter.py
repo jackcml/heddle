@@ -390,6 +390,104 @@ def test_eval_stack_mode_raises(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# indexing / slicing
+# ---------------------------------------------------------------------------
+
+
+def test_index_single_frame_uses_default_static_duration():
+    clip = Clip(
+        [solid((1, 0, 0, 255)), solid((2, 0, 0, 255))],
+        [250, 500],
+        0,
+    )
+
+    out = eval_node(expr_of("src[1]"), None, Env(names={"src": clip}))
+
+    assert out.durations == [100]
+    assert out.frames[0].getpixel((0, 0)) == (2, 0, 0, 255)
+
+
+def test_index_frame_slice_preserves_original_durations():
+    clip = Clip(
+        [
+            solid((1, 0, 0, 255)),
+            solid((2, 0, 0, 255)),
+            solid((3, 0, 0, 255)),
+        ],
+        [100, 200, 300],
+        0,
+    )
+
+    out = eval_node(expr_of("src[1:]"), None, Env(names={"src": clip}))
+
+    assert out.durations == [200, 300]
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (2, 0, 0, 255),
+        (3, 0, 0, 255),
+    ]
+
+
+def test_index_time_offsets_trim_edge_durations():
+    clip = Clip(
+        [
+            solid((1, 0, 0, 255)),
+            solid((2, 0, 0, 255)),
+            solid((3, 0, 0, 255)),
+        ],
+        [100, 200, 300],
+        0,
+    )
+
+    out = eval_node(expr_of("src[50ms:350ms]"), None, Env(names={"src": clip}))
+
+    assert out.durations == [50, 200, 50]
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (1, 0, 0, 255),
+        (2, 0, 0, 255),
+        (3, 0, 0, 255),
+    ]
+
+
+def test_index_time_offset_single_frame_uses_default_static_duration():
+    clip = Clip(
+        [solid((1, 0, 0, 255)), solid((2, 0, 0, 255))],
+        [100, 200],
+        0,
+    )
+
+    out = eval_node(expr_of("src[150ms]"), None, Env(names={"src": clip}))
+
+    assert out.durations == [100]
+    assert out.frames[0].getpixel((0, 0)) == (2, 0, 0, 255)
+
+
+def test_index_spatial_axes_are_y_then_x():
+    img = Image.new("RGBA", (3, 2))
+    for y in range(2):
+        for x in range(3):
+            img.putpixel((x, y), (x, y, 0, 255))
+    clip = Clip([img], [100], 0)
+
+    out = eval_node(expr_of("src[:, 1, 1:3]"), None, Env(names={"src": clip}))
+
+    assert out.frames[0].size == (2, 1)
+    assert [out.frames[0].getpixel((x, 0)) for x in range(2)] == [
+        (1, 1, 0, 255),
+        (2, 1, 0, 255),
+    ]
+
+
+def test_index_slice_clamps_but_single_index_raises():
+    clip = make_clip(n=2)
+
+    out = eval_node(expr_of("src[0:999]"), None, Env(names={"src": clip}))
+    assert len(out.frames) == 2
+
+    with pytest.raises(HeddleError):
+        eval_node(expr_of("src[999]"), None, Env(names={"src": clip}))
+
+
+# ---------------------------------------------------------------------------
 # speed-factor unit validation
 # ---------------------------------------------------------------------------
 
@@ -416,17 +514,6 @@ def test_speed_factor_bad_unit_raises(monkeypatch, src):
 # ---------------------------------------------------------------------------
 # extension seams + sink rules
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "src",
-    ["a[0]"],
-)
-def test_unimplemented_operators_raise(monkeypatch, src):
-    monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "x.gif")
-    monkeypatch.setattr(interpreter, "load", lambda path: make_clip())
-    with pytest.raises(NotImplementedError):
-        eval_node(expr_of(src), None, Env())
 
 
 def test_no_sink_pipeline_raises(monkeypatch):

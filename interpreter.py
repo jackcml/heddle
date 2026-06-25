@@ -16,13 +16,22 @@ from parser import (
     Pipe,
     Pipeline,
     Program,
+    Slice,
     Sink,
     Speed,
     Stack,
     Str,
 )
 from registry import lookup
-from transforms import apply_concat, apply_overlay, apply_speed, apply_stack
+from transforms import (
+    TimeIndex,
+    TimeSlice,
+    apply_concat,
+    apply_index,
+    apply_overlay,
+    apply_speed,
+    apply_stack,
+)
 
 
 @dataclass
@@ -107,11 +116,8 @@ def eval_node(node, input, env: Env) -> Clip:
                 [eval_node(item, input, env) for item in items],
                 [(join.axis, join.mode) for join in joins],
             )
-
-        # TODO: implement remaining types below
         case Index():
-            raise NotImplementedError("indexing / slicing is not implemented yet")
-
+            return eval_index(node, input, env)
         case _:
             raise HeddleError(
                 f"cannot evaluate {type(node).__name__}", node.line, node.col
@@ -140,6 +146,12 @@ def eval_call(node: Call, input, env: Env) -> Clip:
     if t is None:
         raise HeddleError(f"unknown function {func.ident!r}", func.line, func.col)
     return _apply(t, input, node.args, node, env)
+
+
+def eval_index(node: Index, input, env: Env) -> Clip:
+    clip = eval_node(node.base, input, env)
+    axes = [_eval_axis(axis, idx, env, clip) for idx, axis in enumerate(node.axes)]
+    return apply_index(clip, axes)
 
 
 def _apply(t, input, args, node, env: Env) -> Clip:
@@ -189,6 +201,132 @@ def _bind_args(t, args, node, env: Env) -> dict:
                 )
             bound[p.name] = p.default
     return bound
+
+
+# ----------------------------------------------------------------------------
+# Index/slice axis evaluation
+# ----------------------------------------------------------------------------
+
+
+def _eval_axis(node, axis: int, env: Env, clip: Clip):
+    if axis >= 3:
+        raise HeddleError(
+            "indexing supports at most three axes: [time, y, x]", node.line, node.col
+        )
+    if isinstance(node, Slice):
+        return _eval_slice_axis(node, axis, env, clip)
+    return _eval_single_axis(node, axis, env)
+
+
+def _eval_single_axis(node, axis: int, env: Env):
+    value, unit = _eval_axis_value(node, env)
+    if axis == 0 and unit in ("ms", "s"):
+        return TimeIndex(_duration_ms(value, unit, node))
+    return _int_axis_value(
+        value, unit, node, _axis_name(axis), allow_frame_unit=axis == 0
+    )
+
+
+def _eval_slice_axis(node: Slice, axis: int, env: Env, clip: Clip):
+    start = _eval_optional_axis_value(node.start, env)
+    stop = _eval_optional_axis_value(node.stop, env)
+    step = _eval_optional_axis_value(node.step, env)
+
+    if axis == 0:
+        uses_time_offsets = _uses_time_unit(start) or _uses_time_unit(stop)
+        if uses_time_offsets:
+            return TimeSlice(
+                _time_boundary_ms(start, clip, node),
+                _time_boundary_ms(stop, clip, node),
+                _optional_frame_step(step, node),
+            )
+        return slice(
+            _optional_int(start, node, "frame", allow_frame_unit=True),
+            _optional_int(stop, node, "frame", allow_frame_unit=True),
+            _optional_int(step, node, "frame step", allow_frame_unit=True),
+        )
+
+    return slice(
+        _optional_int(start, node, _axis_name(axis)),
+        _optional_int(stop, node, _axis_name(axis)),
+        _optional_int(step, node, f"{_axis_name(axis)} step"),
+    )
+
+
+def _eval_optional_axis_value(node, env: Env):
+    if node is None:
+        return None
+    value, unit = _eval_axis_value(node, env)
+    return value, unit, node
+
+
+def _eval_axis_value(node, env: Env):
+    if isinstance(node, Num):
+        return node.value, node.unit
+    return eval_scalar(node, env), None
+
+
+def _uses_time_unit(value) -> bool:
+    return value is not None and value[1] in ("ms", "s")
+
+
+def _time_boundary_ms(value, clip: Clip, fallback_node):
+    if value is None:
+        return None
+
+    raw, unit, node = value
+    if unit in ("ms", "s"):
+        return _duration_ms(raw, unit, node)
+    frame = _int_axis_value(raw, unit, node, "frame", allow_frame_unit=True)
+    if frame < 0:
+        frame += len(clip.frames)
+    frame = min(max(frame, 0), len(clip.frames))
+    return sum(clip.durations[:frame])
+
+
+def _optional_frame_step(value, fallback_node):
+    if value is None:
+        return None
+    raw, unit, node = value
+    if unit in ("ms", "s"):
+        raise HeddleError(
+            "time-offset slice step must be a frame count", node.line, node.col
+        )
+    return _int_axis_value(raw, unit, node, "frame step", allow_frame_unit=True)
+
+
+def _optional_int(value, fallback_node, name: str, allow_frame_unit: bool = False):
+    if value is None:
+        return None
+    raw, unit, node = value
+    return _int_axis_value(raw, unit, node, name, allow_frame_unit)
+
+
+def _int_axis_value(
+    value, unit, node, name: str, allow_frame_unit: bool = False
+) -> int:
+    allowed_units = (None, "f") if allow_frame_unit else (None,)
+    if unit not in allowed_units:
+        raise HeddleError(f"{name} must be an integer index", node.line, node.col)
+    if isinstance(value, float) and not value.is_integer():
+        raise HeddleError(f"{name} must be an integer index", node.line, node.col)
+    if not isinstance(value, (int, float)):
+        raise HeddleError(f"{name} must be an integer index", node.line, node.col)
+    return int(value)
+
+
+def _duration_ms(value, unit, node) -> int:
+    if unit == "s":
+        ms = value * 1000
+    elif unit == "ms":
+        ms = value
+    else:
+        raise HeddleError("time offset must use 's' or 'ms'", node.line, node.col)
+    return round(ms)
+
+
+def _axis_name(axis: int) -> str:
+    return ("time", "y", "x")[axis]
 
 
 # ----------------------------------------------------------------------------
