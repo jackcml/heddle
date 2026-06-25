@@ -70,6 +70,41 @@ def apply_overlay(layers: list[Clip]) -> Clip:
     return Clip(frames, durations, loop)
 
 
+def apply_stack(items: list[Clip], joins: list[tuple[str, object]]) -> Clip:
+    """Lay clips out spatially, left-to-right for `&` and top-to-bottom for `/`."""
+    for axis, mode in joins:
+        if mode is not None:
+            raise HeddleError(f"stack mode {mode!r} is not implemented yet")
+        if axis not in ("h", "v"):
+            raise HeddleError(f"unknown stack axis {axis!r}")
+
+    frame_count, durations, loop = _shared_timeline(items, "stack")
+    frames = []
+
+    for i in range(frame_count):
+        out = _frame_at(items[0], i).copy()
+        for item, (axis, _) in zip(items[1:], joins):
+            out = _stack_pair(out, _frame_at(item, i), axis)
+        frames.append(out)
+
+    return Clip(frames, durations, loop)
+
+
+def _stack_pair(left: Image.Image, right: Image.Image, axis: str) -> Image.Image:
+    if axis == "h":
+        out = Image.new(
+            "RGBA", (left.width + right.width, max(left.height, right.height))
+        )
+        out.alpha_composite(left, (0, 0))
+        out.alpha_composite(right, (left.width, 0))
+        return out
+
+    out = Image.new("RGBA", (max(left.width, right.width), left.height + right.height))
+    out.alpha_composite(left, (0, 0))
+    out.alpha_composite(right, (0, left.height))
+    return out
+
+
 def _shared_timeline(clips: list[Clip], op: str) -> tuple[int, list[int], int]:
     animated = [clip for clip in clips if clip.is_animated]
     if not animated:

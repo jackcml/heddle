@@ -8,7 +8,7 @@ from errors import HeddleError
 from interpreter import Env, eval_node, run_program
 from parser import parse
 from registry import Param, Transform, lookup, transform
-from transforms import apply_concat, apply_overlay, apply_speed
+from transforms import apply_concat, apply_overlay, apply_speed, apply_stack
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -159,6 +159,40 @@ def test_apply_overlay_rejects_mismatched_animated_timing():
 
     with pytest.raises(HeddleError):
         apply_overlay([first, second])
+
+
+# ---------------------------------------------------------------------------
+# transforms: apply_stack
+# ---------------------------------------------------------------------------
+
+
+def test_apply_stack_horizontal_places_right_item_after_left():
+    left = make_clip(color=(255, 0, 0, 255), size=(1, 1))
+    right = make_clip(color=(0, 0, 255, 255), size=(2, 1))
+
+    out = apply_stack([left, right], [("h", None)])
+
+    assert out.frames[0].size == (3, 1)
+    assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
+    assert out.frames[0].getpixel((1, 0)) == (0, 0, 255, 255)
+    assert out.frames[0].getpixel((2, 0)) == (0, 0, 255, 255)
+
+
+def test_apply_stack_vertical_places_lower_item_below_upper():
+    upper = make_clip(color=(255, 0, 0, 255), size=(1, 1))
+    lower = make_clip(color=(0, 0, 255, 255), size=(1, 2))
+
+    out = apply_stack([upper, lower], [("v", None)])
+
+    assert out.frames[0].size == (1, 3)
+    assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
+    assert out.frames[0].getpixel((0, 1)) == (0, 0, 255, 255)
+    assert out.frames[0].getpixel((0, 2)) == (0, 0, 255, 255)
+
+
+def test_apply_stack_rejects_modes_until_defined():
+    with pytest.raises(HeddleError):
+        apply_stack([make_clip(), make_clip()], [("h", "fit")])
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +361,34 @@ def test_eval_overlay_composites_sources(monkeypatch):
     assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
 
 
+def test_eval_stack_mixed_layout(monkeypatch):
+    clips = {
+        "a.gif": make_clip(color=(255, 0, 0, 255), size=(1, 1)),
+        "b.gif": make_clip(color=(0, 0, 255, 255), size=(1, 1)),
+        "c.gif": make_clip(color=(0, 255, 0, 255), size=(2, 1)),
+    }
+    monkeypatch.setattr(
+        interpreter, "resolve_source", lambda ident, cwd: f"{ident}.gif"
+    )
+    monkeypatch.setattr(interpreter, "load", lambda path: clips[path])
+
+    out = eval_node(expr_of("a & b / c"), None, Env())
+
+    assert out.frames[0].size == (2, 2)
+    assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
+    assert out.frames[0].getpixel((1, 0)) == (0, 0, 255, 255)
+    assert out.frames[0].getpixel((0, 1)) == (0, 255, 0, 255)
+    assert out.frames[0].getpixel((1, 1)) == (0, 255, 0, 255)
+
+
+def test_eval_stack_mode_raises(monkeypatch):
+    monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "x.gif")
+    monkeypatch.setattr(interpreter, "load", lambda path: make_clip())
+
+    with pytest.raises(HeddleError):
+        eval_node(expr_of("a &fit b"), None, Env())
+
+
 # ---------------------------------------------------------------------------
 # speed-factor unit validation
 # ---------------------------------------------------------------------------
@@ -358,7 +420,7 @@ def test_speed_factor_bad_unit_raises(monkeypatch, src):
 
 @pytest.mark.parametrize(
     "src",
-    ["a & b", "a / b", "a[0]"],
+    ["a[0]"],
 )
 def test_unimplemented_operators_raise(monkeypatch, src):
     monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "x.gif")

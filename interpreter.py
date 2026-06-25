@@ -22,7 +22,7 @@ from parser import (
     Str,
 )
 from registry import lookup
-from transforms import apply_concat, apply_overlay, apply_speed
+from transforms import apply_concat, apply_overlay, apply_speed, apply_stack
 
 
 @dataclass
@@ -102,10 +102,13 @@ def eval_node(node, input, env: Env) -> Clip:
             return apply_concat([eval_node(clip, input, env) for clip in clips])
         case Overlay(layers=layers):
             return apply_overlay([eval_node(layer, input, env) for layer in layers])
+        case Stack(items=items, joins=joins):
+            return apply_stack(
+                [eval_node(item, input, env) for item in items],
+                [(join.axis, join.mode) for join in joins],
+            )
 
         # TODO: implement remaining types below
-        case Stack():
-            raise NotImplementedError("the '&' / '/' layout is not implemented yet")
         case Index():
             raise NotImplementedError("indexing / slicing is not implemented yet")
 
