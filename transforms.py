@@ -41,3 +41,13 @@ def apply_speed(clip: Clip, k: float) -> Clip:
 
     scaled = [max(1, round(d / k)) for d in durations]  # floor at 1ms per frame
     return Clip(frames, scaled, clip.loop)
+
+
+def apply_concat(clips: list[Clip]) -> Clip:
+    """Append clips in time, preserving frame durations."""
+    frames = []
+    durations = []
+    for clip in clips:
+        frames.extend(clip.frames)
+        durations.extend(clip.durations)
+    return Clip(frames, durations, clips[0].loop if clips else 0)

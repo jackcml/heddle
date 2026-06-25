@@ -22,7 +22,7 @@ from parser import (
     Str,
 )
 from registry import lookup
-from transforms import apply_speed
+from transforms import apply_concat, apply_speed
 
 
 @dataclass
@@ -98,13 +98,14 @@ def eval_node(node, input, env: Env) -> Clip:
         case Num() | Str():
             raise HeddleError("expected media, got a scalar value", node.line, node.col)
 
+        case Concat(clips=clips):
+            return apply_concat([eval_node(clip, input, env) for clip in clips])
+
         # TODO: implement remaining types below
         case Overlay():
             raise NotImplementedError("the 'over' operator is not implemented yet")
         case Stack():
             raise NotImplementedError("the '&' / '/' layout is not implemented yet")
-        case Concat():
-            raise NotImplementedError("the '>>' concat operator is not implemented yet")
         case Index():
             raise NotImplementedError("indexing / slicing is not implemented yet")
 

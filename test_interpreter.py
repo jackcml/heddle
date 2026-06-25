@@ -8,7 +8,7 @@ from errors import HeddleError
 from interpreter import Env, eval_node, run_program
 from parser import parse
 from registry import Param, Transform, lookup, transform
-from transforms import apply_speed
+from transforms import apply_concat, apply_speed
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -100,6 +100,26 @@ def test_apply_speed_zero_raises():
 def test_apply_speed_floors_at_one_ms():
     out = apply_speed(make_clip(n=1, dur=1), 10)
     assert out.durations == [1]
+
+
+# ---------------------------------------------------------------------------
+# transforms: apply_concat
+# ---------------------------------------------------------------------------
+
+
+def test_apply_concat_appends_frames_and_durations():
+    first = Clip([solid((1, 0, 0, 255)), solid((2, 0, 0, 255))], [100, 200], 3)
+    second = Clip([solid((3, 0, 0, 255))], [300], 0)
+
+    out = apply_concat([first, second])
+
+    assert out.durations == [100, 200, 300]
+    assert out.loop == 3
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (1, 0, 0, 255),
+        (2, 0, 0, 255),
+        (3, 0, 0, 255),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +239,40 @@ def test_binding_resolves_downstream(monkeypatch):
     assert env.names["base"] is src_clip
 
 
+def test_eval_concat_appends_source_clips(monkeypatch):
+    clips = {
+        "a.gif": Clip([solid((1, 0, 0, 255))], [100], 0),
+        "b.gif": Clip([solid((2, 0, 0, 255))], [200], 0),
+    }
+    monkeypatch.setattr(
+        interpreter, "resolve_source", lambda ident, cwd: f"{ident}.gif"
+    )
+    monkeypatch.setattr(interpreter, "load", lambda path: clips[path])
+
+    out = eval_node(expr_of("a >> b"), None, Env())
+
+    assert out.durations == [100, 200]
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (1, 0, 0, 255),
+        (2, 0, 0, 255),
+    ]
+
+
+def test_eval_concat_as_grouped_pipeline_stage(monkeypatch):
+    img = Image.new("RGBA", (2, 1))
+    img.putpixel((0, 0), (255, 0, 0, 255))
+    img.putpixel((1, 0), (0, 255, 0, 255))
+    src_clip = Clip([img], [100], 0)
+    monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "im.gif")
+    monkeypatch.setattr(interpreter, "load", lambda path: src_clip)
+
+    out = eval_node(expr_of("im | (hflip >> hflip^2)"), None, Env())
+
+    assert out.durations == [100, 50]
+    assert out.frames[0].getpixel((0, 0)) == (0, 255, 0, 255)
+    assert out.frames[1].getpixel((0, 0)) == (0, 255, 0, 255)
+
+
 # ---------------------------------------------------------------------------
 # speed-factor unit validation
 # ---------------------------------------------------------------------------
@@ -250,7 +304,7 @@ def test_speed_factor_bad_unit_raises(monkeypatch, src):
 
 @pytest.mark.parametrize(
     "src",
-    ["a over b", "a & b", "a / b", "a >> b", "a[0]"],
+    ["a over b", "a & b", "a / b", "a[0]"],
 )
 def test_unimplemented_operators_raise(monkeypatch, src):
     monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "x.gif")
