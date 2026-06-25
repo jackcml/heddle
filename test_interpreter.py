@@ -8,7 +8,7 @@ from errors import HeddleError
 from interpreter import Env, eval_node, run_program
 from parser import parse
 from registry import Param, Transform, lookup, transform
-from transforms import apply_concat, apply_speed
+from transforms import apply_concat, apply_overlay, apply_speed
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -120,6 +120,45 @@ def test_apply_concat_appends_frames_and_durations():
         (2, 0, 0, 255),
         (3, 0, 0, 255),
     ]
+
+
+# ---------------------------------------------------------------------------
+# transforms: apply_overlay
+# ---------------------------------------------------------------------------
+
+
+def test_apply_overlay_composites_left_layer_over_right():
+    top = make_clip(color=(255, 0, 0, 255))
+    bottom = make_clip(color=(0, 0, 255, 255))
+
+    out = apply_overlay([top, bottom])
+
+    assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+def test_apply_overlay_repeats_static_layer_over_animation():
+    top = make_clip(color=(255, 0, 0, 255))
+    bottom = Clip(
+        [solid((0, 0, 255, 255)), solid((0, 255, 0, 255))],
+        [100, 200],
+        0,
+    )
+
+    out = apply_overlay([top, bottom])
+
+    assert out.durations == [100, 200]
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (255, 0, 0, 255),
+        (255, 0, 0, 255),
+    ]
+
+
+def test_apply_overlay_rejects_mismatched_animated_timing():
+    first = make_clip(n=2, dur=100)
+    second = make_clip(n=2, dur=200)
+
+    with pytest.raises(HeddleError):
+        apply_overlay([first, second])
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +312,21 @@ def test_eval_concat_as_grouped_pipeline_stage(monkeypatch):
     assert out.frames[1].getpixel((0, 0)) == (0, 255, 0, 255)
 
 
+def test_eval_overlay_composites_sources(monkeypatch):
+    clips = {
+        "top.gif": make_clip(color=(255, 0, 0, 255)),
+        "bottom.gif": make_clip(color=(0, 0, 255, 255)),
+    }
+    monkeypatch.setattr(
+        interpreter, "resolve_source", lambda ident, cwd: f"{ident}.gif"
+    )
+    monkeypatch.setattr(interpreter, "load", lambda path: clips[path])
+
+    out = eval_node(expr_of("top over bottom"), None, Env())
+
+    assert out.frames[0].getpixel((0, 0)) == (255, 0, 0, 255)
+
+
 # ---------------------------------------------------------------------------
 # speed-factor unit validation
 # ---------------------------------------------------------------------------
@@ -304,7 +358,7 @@ def test_speed_factor_bad_unit_raises(monkeypatch, src):
 
 @pytest.mark.parametrize(
     "src",
-    ["a over b", "a & b", "a / b", "a[0]"],
+    ["a & b", "a / b", "a[0]"],
 )
 def test_unimplemented_operators_raise(monkeypatch, src):
     monkeypatch.setattr(interpreter, "resolve_source", lambda ident, cwd: "x.gif")
