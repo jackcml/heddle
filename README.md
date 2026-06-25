@@ -2,9 +2,11 @@
 
 A DSL for image and video transformation.
 
-- Currently implemented: tree-walk interpreter with support for miminal operator set, backed by `pillow`
-- Next: support full operator set
+- Currently implemented: tree-walk interpreter with support for base operator set, backed by `pillow`
+- Next: support built-in named transforms
 - Future:
+  - Transitions with `>>`
+  - More comprehensive handling of number types (`ms`, `s`, `%`)
   - Aliasing / assign names to pipelines
   - Custom functions defined by GLSL shaders
 
