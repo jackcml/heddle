@@ -2,6 +2,10 @@
 
 A DSL for image and video transformation.
 
+<img src="examples/outputs/wwwwaiting.gif" alt="animated gif result" />
+
+`wwwwait^0.2 >> (wwwwait^0.2 | hflip) > "wwwwaiting.gif"`
+
 - Currently implemented: tree-walk interpreter with support for base operator set, backed by `pillow`
 - Next: support built-in named transforms
 - Future:
