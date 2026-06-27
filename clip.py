@@ -10,6 +10,7 @@ from errors import HeddleError
 # Default frame duration if a source declares none, should apply to static images
 # NOTE: Reconsider / think about how to support holding images for n frames / seconds
 DEFAULT_MS = 100
+DEFAULT_LOOP = 0  # GIF/WebP convention: 0 = loop forever
 
 # in order of search priority
 _SOURCE_EXTS = (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp")
@@ -26,7 +27,7 @@ class Clip:
 
     frames: list[Image.Image]
     durations: list[int]
-    loop: int = 0  # animation loop count; 0 = loop forever
+    loop: int = DEFAULT_LOOP
 
     @property
     def is_animated(self) -> bool:
@@ -65,7 +66,7 @@ def resolve_source(ident: str, cwd: str = ".") -> str:
     raise HeddleError(f"no source named {ident!r} in {cwd!r} (looked for {tried})")
 
 
-def save(clip: Clip, path: str) -> None:
+def save(clip: Clip, path: str, loop: int = DEFAULT_LOOP) -> None:
     """Write a Clip to disk with the output extension's encoding."""
     if not clip.frames:
         raise HeddleError("cannot save an empty clip")
@@ -79,7 +80,7 @@ def save(clip: Clip, path: str) -> None:
             save_all=True,
             append_images=rest,
             duration=clip.durations,
-            loop=clip.loop,
+            loop=loop,
             disposal=2,
         )
     else:

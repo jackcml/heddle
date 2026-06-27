@@ -540,11 +540,11 @@ def test_scalar_as_media_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_gif_roundtrip(tmp_path):
+def test_gif_output_defaults_to_looping_forever(tmp_path):
     clip = Clip(
         [solid((255, 0, 0, 255)), solid((0, 0, 255, 255))],
         [120, 180],
-        0,
+        1,
     )
     path = tmp_path / "out.gif"
     save(clip, str(path))
@@ -553,3 +553,16 @@ def test_gif_roundtrip(tmp_path):
     reloaded = load(str(path))
     assert len(reloaded.frames) == 2
     assert reloaded.durations == [120, 180]
+    assert reloaded.loop == 0
+
+
+def test_gif_output_accepts_explicit_loop_count(tmp_path):
+    clip = Clip(
+        [solid((255, 0, 0, 255)), solid((0, 0, 255, 255))],
+        [100, 100],
+    )
+    path = tmp_path / "out.gif"
+
+    save(clip, str(path), loop=2)
+
+    assert load(str(path)).loop == 2
