@@ -6,10 +6,8 @@ A DSL for image and video transformation.
 
 `wwwwait^0.2 >> (wwwwait^0.2 | hflip) > "wwwwaiting.gif"`
 
-- Currently implemented: tree-walk interpreter with support for base operator set, backed by `pillow`
-- Next: support built-in named transforms
+- Currently implemented: tree-walk interpreter with the base operators and named functions below, backed by `pillow`
 - Future:
-  - Transitions with `>>`
   - More comprehensive handling of number types (`ms`, `s`, `%`)
   - Aliasing / assign names to pipelines
   - Custom functions defined by GLSL shaders
@@ -32,13 +30,17 @@ Input images and videos are referenced with automatically defined variables. For
 
 ## Functions
 
-Functions are used for transformations not covered by the operators, as well as for programmatic sources like `text`.
+Functions are used for transformations not covered by the operators and for transition markers used inside a timeline.
 
 | fn | description |
 | --- | --- |
-| `text(str, pos)` | displays the given `str` over the source it's applied to, aligned according to `pos`. |
+| `text(str, pos)` | displays the given `str` in white over the input, aligned according to `pos` |
 | `blur(stdev)` | applies a Gaussian blur |
 | `scale(factor)` | scales input by single factor on width and height |
 | `resize(w, h)` | scales input to exact width and height |
 | `reverse()` | reverses a clip, alias to `^-1` |
-| `dissolve(sec)` | dissolve transition for use with `>>` |
+| `dissolve(sec)` | inserts a dissolve lasting `sec` seconds between neighboring clips in a `>>` timeline |
+
+`text` positions may be written as bare names. The supported descriptive names are `TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`, `BOTTOM_LEFT`, `BOTTOM`, and `BOTTOM_RIGHT`; two-letter forms such as `TL`, `TC`, and `BR` are also accepted.
+
+A dissolve must appear between two clips, for example `a >> dissolve(0.5) >> b`. Its frames are sampled at intervals of at most 100ms, with the final interval shortened so the transition has the exact requested duration.
