@@ -88,6 +88,28 @@ def test_blur_rejects_negative_stdev():
 
 
 # ---------------------------------------------------------------------------
+# transforms: scale
+# ---------------------------------------------------------------------------
+
+
+def test_scale_resizes_each_frame_uniformly_and_preserves_metadata():
+    clip = make_clip(n=2, dur=75, size=(4, 6))
+    clip.loop = 2
+
+    out = lookup("scale").func(clip, 1.5)
+
+    assert [frame.size for frame in out.frames] == [(6, 9), (6, 9)]
+    assert out.durations == [75, 75]
+    assert out.loop == 2
+
+
+@pytest.mark.parametrize("factor", [0, -1, float("inf"), "large"])
+def test_scale_rejects_invalid_factor(factor):
+    with pytest.raises(HeddleError, match="positive finite"):
+        lookup("scale").func(make_clip(), factor)
+
+
+# ---------------------------------------------------------------------------
 # transforms: apply_speed (duration scaling)
 # ---------------------------------------------------------------------------
 

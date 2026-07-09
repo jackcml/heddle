@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -32,6 +33,27 @@ def blur(clip: Clip, stdev: float) -> Clip:
         list(clip.durations),
         clip.loop,
     )
+
+
+@transform("scale", params=("factor",))
+def scale(clip: Clip, factor: float) -> Clip:
+    """Resize every frame uniformly by `factor`."""
+    if (
+        not isinstance(factor, (int, float))
+        or isinstance(factor, bool)
+        or not math.isfinite(factor)
+        or factor <= 0
+    ):
+        raise HeddleError("scale factor must be a positive finite number")
+
+    frames = []
+    for frame in clip.frames:
+        size = (
+            max(1, round(frame.width * factor)),
+            max(1, round(frame.height * factor)),
+        )
+        frames.append(frame.resize(size, Image.Resampling.LANCZOS))
+    return Clip(frames, list(clip.durations), clip.loop)
 
 
 ## Operators (symbolic, not named)
