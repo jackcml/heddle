@@ -335,7 +335,11 @@ def _axis_name(axis: int) -> str:
 
 
 def eval_scalar(node, env: Env):
-    """Evaluate a non-media operand to an int/float/str."""
+    """Evaluate a non-media operand to an int/float/str.
+
+    Unbound names are symbolic strings, which lets calls use readable enum-like
+    arguments such as `text("hello", pos=TOP)`.
+    """
     match node:
         case Num(value=value):
             return value
@@ -349,7 +353,7 @@ def eval_scalar(node, env: Env):
                 raise HeddleError(
                     f"{ident!r} is not a scalar value", node.line, node.col
                 )
-            raise HeddleError(f"unknown name {ident!r}", node.line, node.col)
+            return ident
         case _:
             raise HeddleError(
                 "expected a scalar value (number or string)", node.line, node.col

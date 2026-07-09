@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import builtins
 import math
+from dataclasses import dataclass
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from clip import DEFAULT_MS, Clip
 from errors import HeddleError
@@ -87,6 +88,76 @@ def _dimension(value: int, name: str) -> int:
 def reverse(clip: Clip) -> Clip:
     """Reverse frame order and timing, equivalent to the `^-1` operator."""
     return apply_speed(clip, -1)
+
+
+@transform("text", params=("str", "pos"))
+def text(clip: Clip, str: str, pos: str) -> Clip:
+    """Draw `str` in white at the named alignment on every frame."""
+    if not isinstance(str, builtins.str):
+        raise HeddleError("text str must be a string")
+    alignment = _text_alignment(pos)
+    font = ImageFont.load_default()
+    return Clip(
+        [_draw_aligned_text(frame, str, alignment, font) for frame in clip.frames],
+        list(clip.durations),
+        clip.loop,
+    )
+
+
+def _text_alignment(pos: str) -> tuple[str, str]:
+    if not isinstance(pos, builtins.str):
+        raise HeddleError("text pos must be a named alignment")
+    key = pos.upper().replace("-", "_")
+    positions = {
+        "TL": ("left", "top"),
+        "TOP_LEFT": ("left", "top"),
+        "TOP": ("center", "top"),
+        "TC": ("center", "top"),
+        "TOP_CENTER": ("center", "top"),
+        "TR": ("right", "top"),
+        "TOP_RIGHT": ("right", "top"),
+        "LEFT": ("left", "center"),
+        "CL": ("left", "center"),
+        "CENTER_LEFT": ("left", "center"),
+        "CENTER": ("center", "center"),
+        "C": ("center", "center"),
+        "RIGHT": ("right", "center"),
+        "CR": ("right", "center"),
+        "CENTER_RIGHT": ("right", "center"),
+        "BL": ("left", "bottom"),
+        "BOTTOM_LEFT": ("left", "bottom"),
+        "BOTTOM": ("center", "bottom"),
+        "BC": ("center", "bottom"),
+        "BOTTOM_CENTER": ("center", "bottom"),
+        "BR": ("right", "bottom"),
+        "BOTTOM_RIGHT": ("right", "bottom"),
+    }
+    try:
+        return positions[key]
+    except KeyError:
+        raise HeddleError(f"unknown text position {pos!r}") from None
+
+
+def _draw_aligned_text(frame, value, alignment, font):
+    out = frame.copy()
+    draw = ImageDraw.Draw(out)
+    bbox = draw.multiline_textbbox((0, 0), value, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    horizontal, vertical = alignment
+
+    x = {
+        "left": 0,
+        "center": (frame.width - text_width) // 2,
+        "right": frame.width - text_width,
+    }[horizontal]
+    y = {
+        "top": 0,
+        "center": (frame.height - text_height) // 2,
+        "bottom": frame.height - text_height,
+    }[vertical]
+    draw.multiline_text((x - bbox[0], y - bbox[1]), value, font=font, fill="white")
+    return out
 
 
 ## Operators (symbolic, not named)

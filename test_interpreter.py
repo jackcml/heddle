@@ -167,6 +167,51 @@ def test_reverse_call_works_as_pipeline_stage():
 
 
 # ---------------------------------------------------------------------------
+# transforms: text
+# ---------------------------------------------------------------------------
+
+
+def _non_black_bbox(frame):
+    mask = Image.new("1", frame.size)
+    mask.putdata(
+        [pixel[:3] != (0, 0, 0) for pixel in frame.get_flattened_data()]
+    )
+    return mask.getbbox()
+
+
+def test_text_draws_at_bare_named_position_and_preserves_metadata():
+    clip = make_clip(n=2, color=(0, 0, 0, 255), dur=65, size=(30, 30))
+    clip.loop = 3
+
+    out = eval_node(expr_of('text("X", pos=BR)'), clip, Env())
+
+    left, top, right, bottom = _non_black_bbox(out.frames[0])
+    assert left >= 20
+    assert top >= 20
+    assert right <= 30
+    assert bottom <= 30
+    assert out.durations == [65, 65]
+    assert out.loop == 3
+
+
+def test_text_supports_descriptive_top_left_position():
+    out = lookup("text").func(
+        make_clip(color=(0, 0, 0, 255), size=(30, 30)), "X", "top-left"
+    )
+
+    left, top, right, bottom = _non_black_bbox(out.frames[0])
+    assert left == 0
+    assert top == 0
+    assert right < 15
+    assert bottom < 15
+
+
+def test_text_rejects_unknown_position():
+    with pytest.raises(HeddleError, match="unknown text position"):
+        lookup("text").func(make_clip(), "hello", "somewhere")
+
+
+# ---------------------------------------------------------------------------
 # transforms: apply_speed (duration scaling)
 # ---------------------------------------------------------------------------
 
