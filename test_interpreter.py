@@ -132,6 +132,41 @@ def test_resize_rejects_invalid_dimensions(dimensions):
 
 
 # ---------------------------------------------------------------------------
+# transforms: reverse
+# ---------------------------------------------------------------------------
+
+
+def test_reverse_matches_negative_one_speed():
+    clip = Clip(
+        [solid((1, 0, 0, 255)), solid((2, 0, 0, 255))],
+        [60, 140],
+        4,
+    )
+
+    out = lookup("reverse").func(clip)
+    speed_out = apply_speed(clip, -1)
+
+    assert out.durations == speed_out.durations == [140, 60]
+    assert [frame.getpixel((0, 0)) for frame in out.frames] == [
+        (2, 0, 0, 255),
+        (1, 0, 0, 255),
+    ]
+    assert out.loop == 4
+
+
+def test_reverse_call_works_as_pipeline_stage():
+    clip = Clip(
+        [solid((1, 0, 0, 255)), solid((2, 0, 0, 255))],
+        [100, 200],
+        0,
+    )
+
+    out = eval_node(expr_of("reverse()"), clip, Env())
+
+    assert out.durations == [200, 100]
+
+
+# ---------------------------------------------------------------------------
 # transforms: apply_speed (duration scaling)
 # ---------------------------------------------------------------------------
 

@@ -83,6 +83,12 @@ def _dimension(value: int, name: str) -> int:
     return int(value)
 
 
+@transform("reverse")
+def reverse(clip: Clip) -> Clip:
+    """Reverse frame order and timing, equivalent to the `^-1` operator."""
+    return apply_speed(clip, -1)
+
+
 ## Operators (symbolic, not named)
 
 
