@@ -160,6 +160,27 @@ def _draw_aligned_text(frame, value, alignment, font):
     return out
 
 
+@dataclass(frozen=True)
+class Dissolve:
+    duration_ms: int
+
+
+@transform("dissolve", params=("sec",), needs_input=False)
+def dissolve(sec: float) -> Dissolve:
+    """Create a dissolve transition lasting `sec` seconds for use with `>>`."""
+    if (
+        not isinstance(sec, (int, float))
+        or isinstance(sec, bool)
+        or not math.isfinite(sec)
+        or sec <= 0
+    ):
+        raise HeddleError("dissolve duration must be a positive finite number")
+    duration_ms = round(sec * 1000)
+    if duration_ms < 1:
+        raise HeddleError("dissolve duration must be at least 1ms")
+    return Dissolve(duration_ms)
+
+
 ## Operators (symbolic, not named)
 
 
@@ -183,14 +204,68 @@ def apply_speed(clip: Clip, k: float) -> Clip:
     return Clip(frames, scaled, clip.loop)
 
 
-def apply_concat(clips: list[Clip]) -> Clip:
-    """Append clips in time, preserving frame durations."""
+def apply_concat(items: list[Clip | Dissolve]) -> Clip:
+    """Append clips in time, rendering any interior dissolve transitions."""
+    if not items:
+        return Clip([], [], 0)
+    if not isinstance(items[0], Clip):
+        raise HeddleError("a dissolve must appear between two clips")
+
+    first = items[0]
+    frames = list(first.frames)
+    durations = list(first.durations)
+    previous = first
+    pending: Dissolve | None = None
+
+    for item in items[1:]:
+        if isinstance(item, Dissolve):
+            if pending is not None:
+                raise HeddleError("a dissolve must appear between two clips")
+            pending = item
+            continue
+        if not isinstance(item, Clip):
+            raise HeddleError("timeline items must be clips or transitions")
+
+        if pending is not None:
+            transition_frames, transition_durations = _render_dissolve(
+                previous, item, pending
+            )
+            frames.extend(transition_frames)
+            durations.extend(transition_durations)
+            pending = None
+        frames.extend(item.frames)
+        durations.extend(item.durations)
+        previous = item
+
+    if pending is not None:
+        raise HeddleError("a dissolve must appear between two clips")
+    return Clip(frames, durations, first.loop)
+
+
+def _render_dissolve(
+    left: Clip, right: Clip, transition: Dissolve
+) -> tuple[list[Image.Image], list[int]]:
+    if not left.frames or not right.frames:
+        raise HeddleError("cannot dissolve to or from an empty clip")
+    left_frame = left.frames[-1]
+    right_frame = right.frames[0]
+    if left_frame.size != right_frame.size:
+        raise HeddleError("dissolve requires clips to have the same dimensions")
+
+    remaining = transition.duration_ms
+    transition_durations = []
+    while remaining:
+        duration = min(DEFAULT_MS, remaining)
+        transition_durations.append(duration)
+        remaining -= duration
+
     frames = []
-    durations = []
-    for clip in clips:
-        frames.extend(clip.frames)
-        durations.extend(clip.durations)
-    return Clip(frames, durations, clips[0].loop if clips else 0)
+    elapsed = 0
+    for duration in transition_durations:
+        amount = (elapsed + duration / 2) / transition.duration_ms
+        frames.append(Image.blend(left_frame, right_frame, amount))
+        elapsed += duration
+    return frames, transition_durations
 
 
 def apply_overlay(layers: list[Clip]) -> Clip:

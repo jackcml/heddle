@@ -8,7 +8,7 @@ from errors import HeddleError
 from interpreter import Env, eval_node, run_program
 from parser import parse
 from registry import Param, Transform, lookup, transform
-from transforms import apply_concat, apply_overlay, apply_speed, apply_stack
+from transforms import Dissolve, apply_concat, apply_overlay, apply_speed, apply_stack
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -269,6 +269,59 @@ def test_apply_concat_appends_frames_and_durations():
     ]
 
 
+def test_dissolve_inserts_blended_frames_with_exact_duration():
+    first = make_clip(color=(255, 0, 0, 255), dur=100)
+    second = make_clip(color=(0, 0, 255, 255), dur=200)
+
+    out = apply_concat([first, Dissolve(250), second])
+
+    assert out.durations == [100, 100, 100, 50, 200]
+    assert sum(out.durations) == 550
+    for frame in out.frames[1:4]:
+        red, green, blue, alpha = frame.getpixel((0, 0))
+        assert red > 0
+        assert green == 0
+        assert blue > 0
+        assert alpha == 255
+
+
+def test_dissolve_requires_matching_dimensions():
+    with pytest.raises(HeddleError, match="same dimensions"):
+        apply_concat(
+            [
+                make_clip(size=(2, 2)),
+                Dissolve(100),
+                make_clip(size=(3, 2)),
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [Dissolve(100), make_clip()],
+        [make_clip(), Dissolve(100)],
+        [make_clip(), Dissolve(100), Dissolve(100), make_clip()],
+    ],
+)
+def test_dissolve_must_appear_between_clips(items):
+    with pytest.raises(HeddleError, match="between two clips"):
+        apply_concat(items)
+
+
+def test_dissolve_function_builds_transition_in_seconds():
+    transition = lookup("dissolve").func(0.25)
+
+    assert transition == Dissolve(250)
+    assert not lookup("dissolve").needs_input
+
+
+@pytest.mark.parametrize("sec", [0, -1, float("inf"), "slow"])
+def test_dissolve_rejects_invalid_duration(sec):
+    with pytest.raises(HeddleError, match="positive finite"):
+        lookup("dissolve").func(sec)
+
+
 # ---------------------------------------------------------------------------
 # transforms: apply_overlay
 # ---------------------------------------------------------------------------
@@ -476,6 +529,23 @@ def test_eval_concat_appends_source_clips(monkeypatch):
         (1, 0, 0, 255),
         (2, 0, 0, 255),
     ]
+
+
+def test_eval_concat_renders_dissolve_function(monkeypatch):
+    clips = {
+        "a.gif": make_clip(color=(255, 0, 0, 255), dur=100),
+        "b.gif": make_clip(color=(0, 0, 255, 255), dur=200),
+    }
+    monkeypatch.setattr(
+        interpreter, "resolve_source", lambda ident, cwd: f"{ident}.gif"
+    )
+    monkeypatch.setattr(interpreter, "load", lambda path: clips[path])
+
+    out = eval_node(expr_of("a >> dissolve(0.2) >> b"), None, Env())
+
+    assert out.durations == [100, 100, 100, 200]
+    assert out.frames[1].getpixel((0, 0)) == (191, 0, 63, 255)
+    assert out.frames[2].getpixel((0, 0)) == (63, 0, 191, 255)
 
 
 def test_eval_concat_as_grouped_pipeline_stage(monkeypatch):
