@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 from clip import DEFAULT_MS, Clip
 from errors import HeddleError
@@ -17,6 +17,18 @@ def hflip(clip: Clip) -> Clip:
     """Mirror every frame left-to-right."""
     return Clip(
         [ImageOps.mirror(frame) for frame in clip.frames],
+        list(clip.durations),
+        clip.loop,
+    )
+
+
+@transform("blur", params=("stdev",))
+def blur(clip: Clip, stdev: float) -> Clip:
+    """Apply a Gaussian blur with standard deviation `stdev` to every frame."""
+    if not isinstance(stdev, (int, float)) or stdev < 0:
+        raise HeddleError("blur stdev must be a non-negative number")
+    return Clip(
+        [frame.filter(ImageFilter.GaussianBlur(stdev)) for frame in clip.frames],
         list(clip.durations),
         clip.loop,
     )

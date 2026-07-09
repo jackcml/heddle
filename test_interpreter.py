@@ -65,6 +65,29 @@ def test_hflip_keeps_frame_count_and_durations():
 
 
 # ---------------------------------------------------------------------------
+# transforms: blur
+# ---------------------------------------------------------------------------
+
+
+def test_blur_spreads_pixels_and_preserves_clip_metadata():
+    frame = Image.new("RGBA", (9, 9), (0, 0, 0, 255))
+    frame.putpixel((4, 4), (255, 255, 255, 255))
+    clip = Clip([frame, frame.copy()], [70, 90], 3)
+
+    out = lookup("blur").func(clip, 1)
+
+    assert 0 < out.frames[0].getpixel((4, 4))[0] < 255
+    assert out.frames[0].getpixel((4, 3))[0] > 0
+    assert out.durations == [70, 90]
+    assert out.loop == 3
+
+
+def test_blur_rejects_negative_stdev():
+    with pytest.raises(HeddleError, match="non-negative"):
+        lookup("blur").func(make_clip(), -1)
+
+
+# ---------------------------------------------------------------------------
 # transforms: apply_speed (duration scaling)
 # ---------------------------------------------------------------------------
 
