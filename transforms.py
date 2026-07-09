@@ -56,6 +56,33 @@ def scale(clip: Clip, factor: float) -> Clip:
     return Clip(frames, list(clip.durations), clip.loop)
 
 
+@transform("resize", params=("w", "h"))
+def resize(clip: Clip, w: int, h: int) -> Clip:
+    """Resize every frame to the exact width `w` and height `h`."""
+    width = _dimension(w, "width")
+    height = _dimension(h, "height")
+    return Clip(
+        [
+            frame.resize((width, height), Image.Resampling.LANCZOS)
+            for frame in clip.frames
+        ],
+        list(clip.durations),
+        clip.loop,
+    )
+
+
+def _dimension(value: int, name: str) -> int:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or value <= 0
+        or int(value) != value
+    ):
+        raise HeddleError(f"resize {name} must be a positive integer")
+    return int(value)
+
+
 ## Operators (symbolic, not named)
 
 

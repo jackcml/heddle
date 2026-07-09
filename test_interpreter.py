@@ -110,6 +110,28 @@ def test_scale_rejects_invalid_factor(factor):
 
 
 # ---------------------------------------------------------------------------
+# transforms: resize
+# ---------------------------------------------------------------------------
+
+
+def test_resize_uses_exact_dimensions_and_preserves_metadata():
+    clip = make_clip(n=2, dur=80, size=(7, 4))
+    clip.loop = 5
+
+    out = lookup("resize").func(clip, 3, 6)
+
+    assert [frame.size for frame in out.frames] == [(3, 6), (3, 6)]
+    assert out.durations == [80, 80]
+    assert out.loop == 5
+
+
+@pytest.mark.parametrize("dimensions", [(0, 2), (2, -1), (2.5, 4), ("2", 4)])
+def test_resize_rejects_invalid_dimensions(dimensions):
+    with pytest.raises(HeddleError, match="positive integer"):
+        lookup("resize").func(make_clip(), *dimensions)
+
+
+# ---------------------------------------------------------------------------
 # transforms: apply_speed (duration scaling)
 # ---------------------------------------------------------------------------
 
